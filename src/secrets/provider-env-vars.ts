@@ -1,6 +1,7 @@
 export const PROVIDER_ENV_VARS: Record<string, readonly string[]> = {
   openai: ["OPENAI_API_KEY"],
   anthropic: ["ANTHROPIC_API_KEY"],
+  "anthropic-oauth": ["CLAUDE_CODE_OAUTH_TOKEN"],
   google: ["GEMINI_API_KEY"],
   minimax: ["MINIMAX_API_KEY"],
   "minimax-cn": ["MINIMAX_API_KEY"],

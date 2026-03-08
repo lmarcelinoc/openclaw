@@ -299,6 +299,15 @@ const entries: SubCliEntry[] = [
     },
   },
   {
+    name: "diag",
+    description: "Diagnostic tools (health checks, cron debugging, log viewer, usage stats)",
+    hasSubcommands: true,
+    register: async (program) => {
+      const mod = await import("../diag-cli.js");
+      mod.registerDiagCli(program);
+    },
+  },
+  {
     name: "completion",
     description: "Generate shell completion script",
     hasSubcommands: false,

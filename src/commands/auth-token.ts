@@ -4,6 +4,9 @@ export const ANTHROPIC_SETUP_TOKEN_PREFIX = "sk-ant-oat01-";
 export const ANTHROPIC_SETUP_TOKEN_MIN_LENGTH = 80;
 export const DEFAULT_TOKEN_PROFILE_NAME = "default";
 
+/** Env var where the `claude setup-token` output should be stored for the Agent SDK. */
+export const CLAUDE_CODE_OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN";
+
 export function normalizeTokenProfileName(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) {

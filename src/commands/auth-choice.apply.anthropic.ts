@@ -7,7 +7,11 @@ import {
   resolveSecretInputModeForEnvSelection,
 } from "./auth-choice.apply-helpers.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
-import { buildTokenProfileId, validateAnthropicSetupToken } from "./auth-token.js";
+import {
+  buildTokenProfileId,
+  CLAUDE_CODE_OAUTH_TOKEN_ENV,
+  validateAnthropicSetupToken,
+} from "./auth-token.js";
 import { applyAgentDefaultModelPrimary } from "./onboard-auth.config-shared.js";
 import { applyAuthProfileConfig, setAnthropicApiKey } from "./onboard-auth.js";
 
@@ -24,9 +28,10 @@ export async function applyAuthChoiceAnthropic(
   ) {
     let nextConfig = params.config;
     await params.prompter.note(
-      ["Run `claude setup-token` in your terminal.", "Then paste the generated token below."].join(
-        "\n",
-      ),
+      [
+        "Run `claude setup-token` in your terminal.",
+        `Then paste the generated token below (or set ${CLAUDE_CODE_OAUTH_TOKEN_ENV} in your environment).`,
+      ].join("\n"),
       "Anthropic setup-token",
     );
 
@@ -43,13 +48,13 @@ export async function applyAuthChoiceAnthropic(
     let tokenRef: { source: "env" | "file" | "exec"; provider: string; id: string } | undefined;
     if (selectedMode === "ref") {
       const resolved = await promptSecretRefForOnboarding({
-        provider: "anthropic-setup-token",
+        provider: "anthropic-oauth",
         config: params.config,
         prompter: params.prompter,
-        preferredEnvVar: "ANTHROPIC_SETUP_TOKEN",
+        preferredEnvVar: CLAUDE_CODE_OAUTH_TOKEN_ENV,
         copy: {
           sourceMessage: "Where is this Anthropic setup token stored?",
-          envVarPlaceholder: "ANTHROPIC_SETUP_TOKEN",
+          envVarPlaceholder: CLAUDE_CODE_OAUTH_TOKEN_ENV,
         },
       });
       token = resolved.resolvedValue.trim();
