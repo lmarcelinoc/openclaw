@@ -10,6 +10,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { logLlmCall } from "./interaction-store.js";
@@ -24,13 +25,16 @@ function resolveOauthToken() {
     return;
   }
 
-  // 2. Try to parse from .env file
-  const envPath = join(process.cwd(), ".env");
+  // 2. Try to parse from .env file (cwd first, then ~/.openclaw/.env)
+  const envCandidates = [join(process.cwd(), ".env"), join(homedir(), ".openclaw", ".env")];
   let envContents = "";
-  try {
-    envContents = readFileSync(envPath, "utf8");
-  } catch {
-    // No .env file — that's fine
+  for (const envPath of envCandidates) {
+    try {
+      envContents = readFileSync(envPath, "utf8");
+      break;
+    } catch {
+      // try next
+    }
   }
 
   for (const line of envContents.split("\n")) {

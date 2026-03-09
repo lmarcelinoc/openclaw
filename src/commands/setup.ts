@@ -4,6 +4,7 @@ import { DEFAULT_AGENT_WORKSPACE_DIR, ensureAgentWorkspace } from "../agents/wor
 import { type OpenClawConfig, createConfigIO, writeConfigFile } from "../config/config.js";
 import { formatConfigPath, logConfigUpdated } from "../config/logging.js";
 import { resolveSessionTranscriptsDir } from "../config/sessions.js";
+import { ensureMiaDb } from "../intelligence/mia-setup.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { defaultRuntime } from "../runtime.js";
 import { shortenHomePath } from "../utils.js";
@@ -88,4 +89,10 @@ export async function setupCommand(
   const sessionsDir = resolveSessionTranscriptsDir();
   await fs.mkdir(sessionsDir, { recursive: true });
   runtime.log(`Sessions OK: ${shortenHomePath(sessionsDir)}`);
+
+  // Initialize Mia task queue DB.
+  const miaResult = ensureMiaDb(runtime);
+  if (miaResult) {
+    runtime.log(`Mia DB OK: ${shortenHomePath(miaResult.dir)}`);
+  }
 }

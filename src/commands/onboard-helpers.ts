@@ -14,6 +14,7 @@ import { pickPrimaryLanIPv4, isValidIPv4 } from "../gateway/net.js";
 import { isSafeExecutableValue } from "../infra/exec-safety.js";
 import { pickPrimaryTailnetIPv4 } from "../infra/tailnet.js";
 import { isWSL } from "../infra/wsl.js";
+import { ensureMiaDb } from "../intelligence/mia-setup.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { stylePromptTitle } from "../terminal/prompt-style.js";
@@ -299,6 +300,12 @@ export async function ensureWorkspaceAndSessions(
   const sessionsDir = resolveSessionTranscriptsDirForAgent(options?.agentId);
   await fs.mkdir(sessionsDir, { recursive: true });
   runtime.log(`Sessions OK: ${shortenHomePath(sessionsDir)}`);
+
+  // Initialize Mia task queue DB (creates ~/.openclaw/ledi/mia.sqlite + schema + default tasks).
+  const miaResult = ensureMiaDb(runtime);
+  if (miaResult) {
+    runtime.log(`Mia DB OK: ${shortenHomePath(miaResult.dir)}`);
+  }
 }
 
 export function resolveNodeManagerOptions(): Array<{

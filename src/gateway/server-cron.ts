@@ -547,3 +547,49 @@ export async function registerBuiltinNotifyFlushJobs(cron: CronService): Promise
     }
   }
 }
+
+/**
+ * Register the Mia heartbeat cron job that processes the task queue every 10
+ * minutes. The job triggers an isolated agent turn which:
+ * 1. Auto-fails stale tasks (running > 30 min)
+ * 2. Picks up pending due tasks by priority
+ * 3. Surfaces unnotified errors
+ * 4. Reschedules recurring tasks
+ *
+ * Idempotent — skips if a job with the same name already exists.
+ */
+export async function registerBuiltinMiaHeartbeatJob(cron: CronService): Promise<void> {
+  const JOB_NAME = "mia-heartbeat-tick";
+  const existing = await cron.list({ includeDisabled: true });
+  if (existing.some((j) => j.name === JOB_NAME)) {
+    return;
+  }
+
+  const message = [
+    "Run the Mia heartbeat tick. Using the mia.sqlite database:",
+    "1. Auto-fail any task_queue rows stuck in 'running' for >30 minutes.",
+    "2. Query pending due tasks (task_queue WHERE status='pending' AND scheduled_for <= now), ordered by priority.",
+    "3. For each due task, read the task definition from the tasks table and execute its prompt.",
+    "4. Check for unnotified errors (errors WHERE resolved=0 AND notified=0) — notify via Telegram if any.",
+    "5. For completed recurring tasks (tasks with a schedule), enqueue the next run in task_queue.",
+    "If nothing is due and no errors, respond with HEARTBEAT_OK.",
+  ].join("\n");
+
+  try {
+    await cron.add({
+      name: JOB_NAME,
+      description: "Mia task queue heartbeat — process pending tasks every 10 minutes",
+      enabled: true,
+      schedule: { kind: "every", everyMs: 10 * 60 * 1000 },
+      sessionTarget: "isolated",
+      wakeMode: "now",
+      payload: { kind: "agentTurn", message },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    getChildLogger({ module: "cron" }).warn(
+      { jobName: JOB_NAME, err: msg },
+      "cron: failed to register builtin mia heartbeat job",
+    );
+  }
+}

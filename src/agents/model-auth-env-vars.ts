@@ -1,6 +1,6 @@
 export const PROVIDER_ENV_API_KEY_CANDIDATES: Record<string, string[]> = {
   "github-copilot": ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"],
-  anthropic: ["ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"],
+  anthropic: ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"],
   chutes: ["CHUTES_OAUTH_TOKEN", "CHUTES_API_KEY"],
   zai: ["ZAI_API_KEY", "Z_AI_API_KEY"],
   opencode: ["OPENCODE_API_KEY", "OPENCODE_ZEN_API_KEY"],

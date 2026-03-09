@@ -77,7 +77,11 @@ import type { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import { createChannelManager } from "./server-channels.js";
 import { createAgentEventHandler } from "./server-chat.js";
 import { createGatewayCloseHandler } from "./server-close.js";
-import { buildGatewayCronService, registerBuiltinNotifyFlushJobs } from "./server-cron.js";
+import {
+  buildGatewayCronService,
+  registerBuiltinMiaHeartbeatJob,
+  registerBuiltinNotifyFlushJobs,
+} from "./server-cron.js";
 import { startGatewayDiscovery } from "./server-discovery-runtime.js";
 import { applyGatewayLaneConcurrency } from "./server-lanes.js";
 import { startGatewayMaintenanceTimers } from "./server-maintenance.js";
@@ -641,8 +645,9 @@ export async function startGatewayServer(
     broadcast,
   });
   let { cron, storePath: cronStorePath } = cronState;
-  // Register built-in flush jobs non-blocking; failure is logged but not fatal.
+  // Register built-in jobs non-blocking; failure is logged but not fatal.
   registerBuiltinNotifyFlushJobs(cron).catch(() => {});
+  registerBuiltinMiaHeartbeatJob(cron).catch(() => {});
 
   const { getRuntimeSnapshot, startChannels, startChannel, stopChannel, markChannelLoggedOut } =
     channelManager;
