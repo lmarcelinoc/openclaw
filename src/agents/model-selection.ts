@@ -59,6 +59,10 @@ export function normalizeProviderId(provider: string): string {
   if (normalized === "bytedance" || normalized === "doubao") {
     return "volcengine";
   }
+  // OAuth-specific Anthropic provider variant — normalize to base provider.
+  if (normalized === "anthropic-oauth") {
+    return "anthropic";
+  }
   return normalized;
 }
 

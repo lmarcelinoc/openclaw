@@ -41,7 +41,7 @@ export function isModernModelRef(ref: ModelRef): boolean {
     return false;
   }
 
-  if (provider === "anthropic") {
+  if (provider === "anthropic" || provider === "anthropic-oauth") {
     return matchesPrefix(id, ANTHROPIC_PREFIXES);
   }
 

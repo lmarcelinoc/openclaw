@@ -96,7 +96,12 @@ async function runSmokeTest() {
 
     for await (const msg of query({
       prompt: SMOKE_PROMPT,
-      options: { tools: [], maxTurns: 1, abortController: controller },
+      options: {
+        tools: [],
+        maxTurns: 1,
+        abortController: controller,
+        env: { ...process.env, CLAUDECODE: undefined },
+      },
     })) {
       if (msg.type === "result" && !msg.is_error) {
         resultText = msg.result ?? "";
@@ -168,6 +173,8 @@ export async function runAnthropicAgentPrompt({
         maxTurns,
         model,
         abortController: controller,
+        // Strip CLAUDECODE so the bundled CLI can spawn from within a Claude Code session.
+        env: { ...process.env, CLAUDECODE: undefined },
       },
     })) {
       if (msg.type === "assistant") {

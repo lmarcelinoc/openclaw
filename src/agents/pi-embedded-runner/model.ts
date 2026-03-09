@@ -142,7 +142,12 @@ export function resolveModelWithRegistry(params: {
 }): Model<Api> | undefined {
   const { provider, modelId, modelRegistry, cfg } = params;
   const providerConfig = resolveConfiguredProviderConfig(cfg, provider);
-  const model = modelRegistry.find(provider, modelId) as Model<Api> | null;
+  // Try the raw provider first, then the normalized form (e.g. anthropic-oauth → anthropic).
+  const normalizedForRegistry = normalizeProviderId(provider);
+  const model = (modelRegistry.find(provider, modelId) ??
+    (normalizedForRegistry !== provider
+      ? modelRegistry.find(normalizedForRegistry, modelId)
+      : null)) as Model<Api> | null;
 
   if (model) {
     return normalizeModelCompat(
