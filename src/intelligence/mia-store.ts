@@ -53,6 +53,16 @@ export function openMiaDb(dir?: string): import("node:sqlite").DatabaseSync | nu
   return db;
 }
 
+/** Ensure the Mia DB is initialized and return its directory, or null if node:sqlite is unavailable. */
+export function ensureMiaDb(_runtime?: unknown): { dir: string } | null {
+  const dbDir = resolveMiaDbDir();
+  const db = openMiaDb(dbDir);
+  if (!db) {
+    return null;
+  }
+  return { dir: dbDir };
+}
+
 /** Clear all cached DB handles (used in tests to reset state between runs). */
 export function clearMiaDbCacheForTest(): void {
   for (const db of DB_CACHE.values()) {
