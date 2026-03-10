@@ -79,6 +79,7 @@ import { createAgentEventHandler } from "./server-chat.js";
 import { createGatewayCloseHandler } from "./server-close.js";
 import {
   buildGatewayCronService,
+  registerBuiltinGatewayWatchdogJob,
   registerBuiltinMiaHeartbeatJob,
   registerBuiltinNotifyFlushJobs,
 } from "./server-cron.js";
@@ -648,6 +649,7 @@ export async function startGatewayServer(
   // Register built-in jobs non-blocking; failure is logged but not fatal.
   registerBuiltinNotifyFlushJobs(cron).catch(() => {});
   registerBuiltinMiaHeartbeatJob(cron).catch(() => {});
+  registerBuiltinGatewayWatchdogJob(cron).catch(() => {});
 
   const { getRuntimeSnapshot, startChannels, startChannel, stopChannel, markChannelLoggedOut } =
     channelManager;

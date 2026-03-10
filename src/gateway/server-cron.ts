@@ -593,3 +593,50 @@ export async function registerBuiltinMiaHeartbeatJob(cron: CronService): Promise
     );
   }
 }
+
+/**
+ * Register a gateway watchdog cron job that runs every 5 minutes to:
+ * 1. Probe gateway health
+ * 2. If down: attempt auto-repair (re-bootstrap launchd / restart systemd)
+ * 3. Send a Telegram alert when the gateway goes down or recovers
+ *
+ * Idempotent — skips if a job with the same name already exists.
+ */
+export async function registerBuiltinGatewayWatchdogJob(cron: CronService): Promise<void> {
+  const JOB_NAME = "gateway-watchdog";
+  const existing = await cron.list({ includeDisabled: true });
+  if (existing.some((j) => j.name === JOB_NAME)) {
+    return;
+  }
+
+  const message = [
+    "Run the gateway watchdog health check.",
+    "1. Call the gateway health endpoint. If it responds, the gateway is healthy.",
+    "2. If the health probe fails, check if the launchd agent (macOS) or systemd unit (Linux) is loaded.",
+    "3. If the service is not loaded, re-bootstrap it (launchctl bootstrap + kickstart).",
+    "4. If the service is loaded but not responding, kickstart it.",
+    "5. Wait 5 seconds, then re-probe health.",
+    "6. Report the result:",
+    "   - If recovered: send a recovery notification via Telegram.",
+    "   - If still down: send an alert via Telegram with the repair attempt details.",
+    "   - If healthy and was healthy: respond with WATCHDOG_OK.",
+  ].join("\n");
+
+  try {
+    await cron.add({
+      name: JOB_NAME,
+      description: "Gateway health watchdog — probe + auto-repair every 5 minutes",
+      enabled: true,
+      schedule: { kind: "every", everyMs: 5 * 60 * 1000 },
+      sessionTarget: "isolated",
+      wakeMode: "now",
+      payload: { kind: "agentTurn", message },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    getChildLogger({ module: "cron" }).warn(
+      { jobName: JOB_NAME, err: msg },
+      "cron: failed to register builtin gateway watchdog job",
+    );
+  }
+}
