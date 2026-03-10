@@ -344,6 +344,42 @@ describe("buildServiceEnvironment", () => {
     expect(env).not.toHaveProperty("PATH");
     expect(env.OPENCLAW_WINDOWS_TASK_NAME).toBe("OpenClaw Gateway");
   });
+
+  it("forwards secret env vars from install-time process env into the service unit", () => {
+    const env = buildServiceEnvironment({
+      env: {
+        HOME: "/home/user",
+        CLAUDE_CODE_OAUTH_TOKEN: "sk-ant-oat01-test-token",
+        TELEGRAM_BOT_TOKEN: "123456:ABC-test-token",
+        DISCORD_BOT_TOKEN: "discord-test-token",
+        SLACK_BOT_TOKEN: "xoxb-test-token",
+        GEMINI_API_KEY: "AIza-test-key",
+        BRAVE_API_KEY: "bsa-test-key",
+      },
+      port: 18789,
+    });
+
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("sk-ant-oat01-test-token");
+    expect(env.TELEGRAM_BOT_TOKEN).toBe("123456:ABC-test-token");
+    expect(env.DISCORD_BOT_TOKEN).toBe("discord-test-token");
+    expect(env.SLACK_BOT_TOKEN).toBe("xoxb-test-token");
+    expect(env.GEMINI_API_KEY).toBe("AIza-test-key");
+    expect(env.BRAVE_API_KEY).toBe("bsa-test-key");
+  });
+
+  it("omits secret env vars that are empty or absent", () => {
+    const env = buildServiceEnvironment({
+      env: {
+        HOME: "/home/user",
+        CLAUDE_CODE_OAUTH_TOKEN: "  ",
+        TELEGRAM_BOT_TOKEN: "",
+      },
+      port: 18789,
+    });
+
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
+    expect(env.TELEGRAM_BOT_TOKEN).toBeUndefined();
+  });
 });
 
 describe("buildNodeServiceEnvironment", () => {

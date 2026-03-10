@@ -47,6 +47,57 @@ const SERVICE_PROXY_ENV_KEYS = [
   "all_proxy",
 ] as const;
 
+/**
+ * Secret / credential env vars that should be forwarded from the install-time
+ * process environment into the systemd/launchd service unit so the gateway can
+ * resolve auth profiles and channel tokens without a separate login step.
+ */
+const SERVICE_SECRET_ENV_KEYS = [
+  // Anthropic (Claude Code OAuth and raw API key)
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_OAUTH_TOKEN",
+  // Other AI providers
+  "OPENAI_API_KEY",
+  "GEMINI_API_KEY",
+  "ZAI_API_KEY",
+  "OPENROUTER_API_KEY",
+  "AI_GATEWAY_API_KEY",
+  "MINIMAX_API_KEY",
+  "SYNTHETIC_API_KEY",
+  "KILOCODE_API_KEY",
+  "ELEVENLABS_API_KEY",
+  // Messaging channel tokens
+  "TELEGRAM_BOT_TOKEN",
+  "DISCORD_BOT_TOKEN",
+  "SLACK_BOT_TOKEN",
+  "SLACK_APP_TOKEN",
+  // Search providers
+  "BRAVE_API_KEY",
+  "SERPAPI_KEY",
+  // Gateway auth
+  "OPENCLAW_GATEWAY_TOKEN",
+  "OPENCLAW_GATEWAY_PASSWORD",
+] as const;
+
+function readServiceSecretEnvironment(
+  env: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {};
+  for (const key of SERVICE_SECRET_ENV_KEYS) {
+    const value = env[key];
+    if (typeof value !== "string") {
+      continue;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      continue;
+    }
+    out[key] = trimmed;
+  }
+  return out;
+}
+
 function readServiceProxyEnvironment(
   env: Record<string, string | undefined>,
 ): Record<string, string | undefined> {
@@ -298,6 +349,9 @@ function buildCommonServiceEnvironment(
   const serviceEnv: Record<string, string | undefined> = {
     HOME: env.HOME,
     TMPDIR: sharedEnv.tmpDir,
+    // Forward credential/token env vars present at install time so the service
+    // can resolve auth profiles and channel tokens without a separate login step.
+    ...readServiceSecretEnvironment(env),
     ...sharedEnv.proxyEnv,
     NODE_EXTRA_CA_CERTS: sharedEnv.nodeCaCerts,
     NODE_USE_SYSTEM_CA: sharedEnv.nodeUseSystemCa,
