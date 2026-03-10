@@ -6,6 +6,36 @@
 
 ---
 
+## Quick start — automated setup (recommended)
+
+The setup scripts check for every dependency, install anything missing, walk you through OAuth login, and launch the onboarding wizard. **Start here.**
+
+**Linux / macOS:**
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/lmarcelinoc/openclaw/main/setup.sh)
+```
+
+Or if you already have the repo:
+
+```bash
+bash setup.sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+# Allow scripts to run (one-time)
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# Run setup
+.\setup.ps1
+```
+
+Both scripts are safe to rerun — they skip steps that are already done.
+
+---
+
 ## Before you start — get your Claude credentials
 
 OpenClaw Voltek authenticates via **Claude Code OAuth** (the Anthropic Agent SDK). This means you log in through the `claude` CLI — no raw API key needed.
@@ -275,14 +305,14 @@ npm install -g openclaw@latest
 
 ## Troubleshooting
 
-| Problem                          | Fix                                                                        |
-| -------------------------------- | -------------------------------------------------------------------------- |
-| `openclaw: command not found`    | npm global bin isn't on PATH — see platform section above                  |
-| `EACCES` on npm install          | Switch to user-writable npm prefix — see Linux section                     |
-| Gateway won't start              | Run `openclaw doctor` to diagnose                                          |
-| API key not working              | Check `~/.openclaw/.env` has `ANTHROPIC_API_KEY=sk-ant-...` with no quotes |
-| Execution policy error (Windows) | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`                      |
-| Node version too old             | Install Node 22+ (see platform section)                                    |
+| Problem                          | Fix                                                                |
+| -------------------------------- | ------------------------------------------------------------------ |
+| `openclaw: command not found`    | npm global bin isn't on PATH — see platform section above          |
+| `EACCES` on npm install          | Switch to user-writable npm prefix — see Linux section             |
+| Gateway won't start              | Run `openclaw doctor` to diagnose                                  |
+| Auth errors / token expired      | Rerun `claude setup-token` then `openclaw models auth setup-token` |
+| Execution policy error (Windows) | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`              |
+| Node version too old             | Install Node 22+ (see platform section)                            |
 
 Run `openclaw doctor` for a full health check.
 
