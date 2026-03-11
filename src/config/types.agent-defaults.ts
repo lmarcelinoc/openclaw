@@ -326,6 +326,8 @@ export type AgentCompactionConfig = {
    * When set, compaction uses this model instead of the agent's primary model.
    * Falls back to the primary model when unset. */
   model?: string;
+  /** Fraction of tokenBudget at which proactive compaction triggers after each turn (0.5-0.95, default 0.80). */
+  proactiveThreshold?: number;
 };
 
 export type AgentCompactionMemoryFlushConfig = {

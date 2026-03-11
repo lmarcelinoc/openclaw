@@ -1,4 +1,7 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import { estimateMessagesTokens } from "../agents/compaction.js";
+import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 import { registerContextEngine } from "./registry.js";
 import type {
   ContextEngine,
@@ -8,6 +11,10 @@ import type {
   ContextEngineRuntimeContext,
   IngestResult,
 } from "./types.js";
+
+const log = createSubsystemLogger("context-engine/legacy");
+
+const DEFAULT_PROACTIVE_THRESHOLD = 0.8;
 
 /**
  * LegacyContextEngine wraps the existing compaction behavior behind the
@@ -47,7 +54,7 @@ export class LegacyContextEngine implements ContextEngine {
     };
   }
 
-  async afterTurn(_params: {
+  async afterTurn(params: {
     sessionId: string;
     sessionFile: string;
     messages: AgentMessage[];
@@ -57,7 +64,68 @@ export class LegacyContextEngine implements ContextEngine {
     tokenBudget?: number;
     runtimeContext?: ContextEngineRuntimeContext;
   }): Promise<void> {
-    // No-op: legacy flow persists context directly in SessionManager.
+    // Skip when there is no budget to evaluate against.
+    if (!params.tokenBudget || params.tokenBudget <= 0) {
+      return;
+    }
+
+    // Skip for heartbeat sessions — they are short-lived.
+    if (params.isHeartbeat) {
+      return;
+    }
+
+    // Resolve the proactive threshold from config (carried in runtimeContext).
+    const config = params.runtimeContext?.config as OpenClawConfig | undefined;
+    const threshold =
+      config?.agents?.defaults?.compaction?.proactiveThreshold ?? DEFAULT_PROACTIVE_THRESHOLD;
+
+    if (threshold <= 0 || threshold > 1) {
+      return;
+    }
+
+    const estimatedTokens = estimateMessagesTokens(params.messages);
+    const thresholdTokens = Math.floor(params.tokenBudget * threshold);
+
+    if (estimatedTokens <= thresholdTokens) {
+      return;
+    }
+
+    log.info(
+      `[proactive-compaction] triggering: estimatedTokens=${estimatedTokens} ` +
+        `thresholdTokens=${thresholdTokens} (${(threshold * 100).toFixed(0)}% of ${params.tokenBudget}) ` +
+        `sessionId=${params.sessionId}`,
+    );
+
+    try {
+      const result = await this.compact({
+        sessionId: params.sessionId,
+        sessionFile: params.sessionFile,
+        tokenBudget: params.tokenBudget,
+        currentTokenCount: estimatedTokens,
+        runtimeContext: {
+          ...params.runtimeContext,
+          trigger: "proactive",
+        },
+      });
+
+      if (result.compacted) {
+        log.info(
+          `[proactive-compaction] completed: tokensBefore=${result.result?.tokensBefore ?? "?"} ` +
+            `tokensAfter=${result.result?.tokensAfter ?? "?"} sessionId=${params.sessionId}`,
+        );
+      } else {
+        log.info(
+          `[proactive-compaction] skipped: reason=${result.reason ?? "unknown"} ` +
+            `sessionId=${params.sessionId}`,
+        );
+      }
+    } catch (err) {
+      // Proactive compaction is best-effort; never fail the parent turn.
+      log.warn(
+        `[proactive-compaction] failed: ${err instanceof Error ? err.message : String(err)} ` +
+          `sessionId=${params.sessionId}`,
+      );
+    }
   }
 
   async compact(params: {
