@@ -140,6 +140,26 @@ function resolveStorePath(agentId: string, raw?: string): string {
   return resolveUserPath(withToken);
 }
 
+const VALID_EMBEDDING_PROVIDERS = [
+  "openai",
+  "local",
+  "gemini",
+  "voyage",
+  "mistral",
+  "ollama",
+  "auto",
+] as const;
+
+function resolveEmbeddingProviderFromEnv(): ResolvedMemorySearchConfig["provider"] | undefined {
+  const raw = process.env.OPENCLAW_EMBEDDING_PROVIDER?.trim().toLowerCase();
+  if (!raw) {
+    return undefined;
+  }
+  return (VALID_EMBEDDING_PROVIDERS as readonly string[]).includes(raw)
+    ? (raw as ResolvedMemorySearchConfig["provider"])
+    : undefined;
+}
+
 function mergeConfig(
   defaults: MemorySearchConfig | undefined,
   overrides: MemorySearchConfig | undefined,
@@ -148,7 +168,8 @@ function mergeConfig(
   const enabled = overrides?.enabled ?? defaults?.enabled ?? true;
   const sessionMemory =
     overrides?.experimental?.sessionMemory ?? defaults?.experimental?.sessionMemory ?? false;
-  const provider = overrides?.provider ?? defaults?.provider ?? "auto";
+  const provider =
+    overrides?.provider ?? defaults?.provider ?? resolveEmbeddingProviderFromEnv() ?? "auto";
   const defaultRemote = defaults?.remote;
   const overrideRemote = overrides?.remote;
   const hasRemoteConfig = Boolean(
@@ -200,7 +221,8 @@ function mergeConfig(
             : provider === "ollama"
               ? DEFAULT_OLLAMA_MODEL
               : undefined;
-  const model = overrides?.model ?? defaults?.model ?? modelDefault ?? "";
+  const envModel = process.env.OPENCLAW_EMBEDDING_MODEL?.trim() || undefined;
+  const model = overrides?.model ?? defaults?.model ?? envModel ?? modelDefault ?? "";
   const outputDimensionality = overrides?.outputDimensionality ?? defaults?.outputDimensionality;
   const local = {
     modelPath: overrides?.local?.modelPath ?? defaults?.local?.modelPath,
