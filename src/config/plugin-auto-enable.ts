@@ -28,6 +28,7 @@ export type PluginAutoEnableResult = {
 };
 
 const PROVIDER_PLUGIN_IDS: Array<{ pluginId: string; providerId: string }> = [
+  { pluginId: "anthropic-oauth", providerId: "anthropic-oauth" },
   { pluginId: "google-gemini-cli-auth", providerId: "google-gemini-cli" },
   { pluginId: "qwen-portal-auth", providerId: "qwen-portal" },
   { pluginId: "copilot-proxy", providerId: "copilot-proxy" },
@@ -247,7 +248,43 @@ function extractProviderFromModelRef(value: string): string | null {
   return normalizeProviderId(trimmed.slice(0, slash));
 }
 
-function isProviderConfigured(cfg: OpenClawConfig, providerId: string): boolean {
+function isAnthropicOauthConfigured(
+  cfg: OpenClawConfig,
+  env: NodeJS.ProcessEnv,
+): boolean {
+  // Fast path: env var is set with an OAuth token prefix.
+  const envToken = (env["CLAUDE_CODE_OAUTH_TOKEN"] ?? "").trim();
+  if (envToken.startsWith("sk-ant-oat")) {
+    return true;
+  }
+  // Slow path: an anthropic auth profile exists in token mode (OAuth tokens
+  // stored via `models auth login --provider anthropic-oauth`).
+  const profiles = cfg.auth?.profiles;
+  if (profiles && typeof profiles === "object") {
+    for (const profile of Object.values(profiles)) {
+      if (!isRecord(profile)) {
+        continue;
+      }
+      const provider = normalizeProviderId(String(profile.provider ?? ""));
+      if (provider === "anthropic" && profile.mode === "token") {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function isProviderConfigured(
+  cfg: OpenClawConfig,
+  providerId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  // anthropic-oauth is a sub-variant of the anthropic provider — use a
+  // dedicated check so we don't auto-enable it for plain API-key setups.
+  if (providerId === "anthropic-oauth") {
+    return isAnthropicOauthConfigured(cfg, env);
+  }
+
   const normalized = normalizeProviderId(providerId);
 
   const profiles = cfg.auth?.profiles;
@@ -349,7 +386,7 @@ function resolveConfiguredPlugins(
   }
 
   for (const mapping of PROVIDER_PLUGIN_IDS) {
-    if (isProviderConfigured(cfg, mapping.providerId)) {
+    if (isProviderConfigured(cfg, mapping.providerId, env)) {
       changes.push({
         pluginId: mapping.pluginId,
         reason: `${mapping.providerId} auth configured`,
