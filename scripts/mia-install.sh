@@ -418,11 +418,16 @@ else
   echo -e " ${CYAN}2.${RESET} Log in, then paste the code shown back here"
   echo ""
 
-  # Run auth login fully attached to the terminal (stdin + stdout + stderr).
-  # This is required because claude auth login is an interactive TUI —
-  # piping or redirecting any of its streams breaks the code-paste prompt.
-  "${CLAUDE_BIN:-claude}" auth login </dev/tty >/dev/tty 2>/dev/tty
-  LOGIN_EXIT=$?
+  # claude auth login is a readline TUI — it needs a real PTY to render
+  # the code-paste prompt. Use `script` to allocate one; fall back to
+  # plain /dev/tty redirect if `script` isn't available.
+  if command -v script &>/dev/null; then
+    script -q -c "${CLAUDE_BIN:-claude} auth login" /dev/null
+    LOGIN_EXIT=$?
+  else
+    "${CLAUDE_BIN:-claude}" auth login </dev/tty >/dev/tty 2>/dev/tty
+    LOGIN_EXIT=$?
+  fi
 
   if [[ $LOGIN_EXIT -eq 0 ]]; then
     mia_ok "Claude CLI authenticated"
