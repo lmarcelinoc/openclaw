@@ -1,16 +1,27 @@
 # anthropic-oauth
 
-Registers **Anthropic (Claude Code / OAuth)** as a distinct provider in OpenClaw so it surfaces separately from the raw API-key path in `models auth login` and the model picker.
+Registers **Anthropic (Claude Code CLI)** as a distinct provider that routes all traffic through the `claude -p` CLI subprocess.
 
-## How it works
+## Why not the SDK?
 
-Instead of an `ANTHROPIC_API_KEY`, this provider uses the OAuth token produced by:
+Anthropic's `claude setup-token` OAuth token is issued for the **Claude Code CLI only**. Using it directly against `api.anthropic.com` via an SDK violates Anthropic's usage policies. This provider ensures OpenClaw never makes direct API calls with the OAuth token — it always goes through the official `claude` binary.
 
-```bash
-claude setup-token
+## Runtime path
+
+```
+OpenClaw → runCliAgent() → spawn("claude", ["-p", "--output-format", "json", ...])
+                         → claude binary  (manages its own OAuth session)
+                         → Anthropic  (via official CLI channel)
 ```
 
-The token (`sk-ant-oat01-…`) is stored as a bearer credential under `anthropic:default`. The pi-embedded-runner detects the `sk-ant-oat` prefix at runtime and automatically adds the required OAuth beta headers (`claude-code-20250219`, `oauth-2025-04-20`).
+No API key or OAuth token is ever stored in OpenClaw credentials.
+
+## Prerequisites
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude auth login
+```
 
 ## Setup
 
@@ -18,14 +29,43 @@ The token (`sk-ant-oat01-…`) is stored as a bearer credential under `anthropic
 openclaw models auth login --provider anthropic-oauth
 ```
 
-Or set the env var before running onboarding:
+The auth flow will:
+1. Verify `claude` is installed and reachable in PATH
+2. Verify the CLI session is authenticated
+3. Let you pick a model tier (sonnet / opus / haiku)
+4. Configure `agents.defaults.model.primary` to `claude-cli/<tier>`
+
+## Changing the model tier
+
+Re-run the auth flow:
 
 ```bash
-export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+openclaw models auth login --provider anthropic-oauth
 ```
 
-## Why a separate provider?
+Or edit config directly:
 
-- Keeps the API-key and OAuth paths clearly differentiated in config and UI
-- `CLAUDE_CODE_OAUTH_TOKEN` is forwarded to child processes (gateway, daemon) separately from `ANTHROPIC_API_KEY`
-- Lets you have both an API-key profile and an OAuth profile active simultaneously with explicit ordering
+```json5
+{
+  agents: {
+    defaults: {
+      model: { primary: "claude-cli/opus" }
+    }
+  }
+}
+```
+
+## Using as fallback
+
+```json5
+{
+  agents: {
+    defaults: {
+      model: {
+        primary: "anthropic/claude-sonnet-4-6",
+        fallbacks: ["claude-cli/sonnet"]
+      }
+    }
+  }
+}
+```

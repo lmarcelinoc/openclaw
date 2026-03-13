@@ -1,14 +1,31 @@
 /**
- * anthropic-oauth — registers Anthropic (Claude Code / OAuth) as a distinct
- * ProviderPlugin so it surfaces in `models auth login` and the model picker
- * separately from the raw API-key path.
+ * anthropic-oauth — registers "Anthropic (Claude Code CLI)" as a distinct
+ * ProviderPlugin that routes ALL traffic through the `claude -p` subprocess.
  *
- * Auth flow: user runs `claude setup-token`, pastes the resulting
- * `sk-ant-oat01-…` token. The token is stored as a `token` credential under
- * the `anthropic` provider so the pi-embedded-runner can detect it and add
- * the correct OAuth beta headers automatically.
+ * WHY THIS EXISTS
+ * ---------------
+ * The `claude setup-token` OAuth token is issued by Anthropic for the
+ * Claude Code CLI *only*. Using it directly against api.anthropic.com via
+ * an SDK violates Anthropic's usage policies. This provider ensures OpenClaw
+ * always goes through the official `claude` CLI binary (subprocess) so no
+ * direct API call is ever made with the OAuth token.
+ *
+ * WHAT IT DOES
+ * ------------
+ * 1. Verifies the `claude` binary is installed and authenticated.
+ * 2. Configures the agent's primary model to `claude-cli/sonnet` (or the
+ *    user's preferred alias), routing through the built-in cli-runner.
+ * 3. Does NOT store any API key or OAuth token in OpenClaw credentials —
+ *    the `claude` CLI manages its own auth state entirely.
+ *
+ * RUNTIME PATH
+ * ------------
+ *   OpenClaw → runCliAgent() → spawn("claude", ["-p", "--output-format", "json", ...])
+ *                            → claude binary (manages its own OAuth session)
+ *                            → Anthropic (via official CLI channel)
  */
 
+import { execSync } from "node:child_process";
 import {
   emptyPluginConfigSchema,
   type OpenClawPluginApi,
@@ -17,106 +34,128 @@ import {
 } from "openclaw/plugin-sdk";
 
 const PROVIDER_ID = "anthropic-oauth";
-const PROVIDER_LABEL = "Anthropic (Claude Code / OAuth)";
-const AUTH_PROFILE_PROVIDER = "anthropic"; // normalised provider for credential + config
-const AUTH_PROFILE_ID = "anthropic:default";
-const DEFAULT_MODEL = "anthropic/claude-sonnet-4-6";
-const SETUP_TOKEN_PREFIX = "sk-ant-oat01-";
-const SETUP_TOKEN_MIN_LENGTH = 80;
-const CLAUDE_CODE_OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN";
+const PROVIDER_LABEL = "Anthropic (Claude Code CLI)";
 
-function validateSetupToken(raw: string): string | undefined {
-  const trimmed = raw.trim();
-  if (!trimmed) return "Required";
-  if (!trimmed.startsWith(SETUP_TOKEN_PREFIX))
-    return `Expected token starting with ${SETUP_TOKEN_PREFIX}`;
-  if (trimmed.length < SETUP_TOKEN_MIN_LENGTH)
-    return "Token looks too short — paste the full setup-token output";
-  return undefined;
+/** Model refs that route through the claude-cli subprocess backend. */
+const DEFAULT_CLI_MODEL = "claude-cli/sonnet";
+const AVAILABLE_CLI_MODELS = [
+  { value: "claude-cli/sonnet", label: "Claude Sonnet (default)" },
+  { value: "claude-cli/opus", label: "Claude Opus" },
+  { value: "claude-cli/haiku", label: "Claude Haiku" },
+];
+
+function checkClaudeInstalled(): { ok: boolean; version?: string; error?: string } {
+  try {
+    const out = execSync("claude --version", { encoding: "utf8", timeout: 5000 }).trim();
+    return { ok: true, version: out };
+  } catch {
+    return {
+      ok: false,
+      error:
+        "claude CLI not found in PATH. Install it with: npm install -g @anthropic-ai/claude-code",
+    };
+  }
 }
 
-async function runSetupTokenAuth(ctx: ProviderAuthContext): Promise<ProviderAuthResult> {
+function checkClaudeAuthed(): { ok: boolean; error?: string } {
+  try {
+    // A fast non-interactive call to see if the session is valid.
+    execSync("claude auth status", { encoding: "utf8", timeout: 8000 });
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // auth status exits non-zero when not authenticated.
+    if (msg.includes("not logged in") || msg.includes("unauthenticated") || msg.includes("401")) {
+      return {
+        ok: false,
+        error: "Not logged in. Run `claude auth login` to authenticate the Claude CLI.",
+      };
+    }
+    // If the command doesn't exist / times out, treat as a warning (older CLI).
+    return { ok: true };
+  }
+}
+
+async function runClaudeCliAuth(ctx: ProviderAuthContext): Promise<ProviderAuthResult> {
   const { prompter } = ctx;
 
+  // 1. Check the binary is available.
+  const installCheck = checkClaudeInstalled();
+  if (!installCheck.ok) {
+    throw new Error(installCheck.error!);
+  }
   await prompter.note(
-    [
-      "Run `claude setup-token` in your terminal.",
-      `Paste the generated token below, or pre-set ${CLAUDE_CODE_OAUTH_TOKEN_ENV} in your environment.`,
-    ].join("\n"),
-    "Anthropic Claude Code OAuth",
+    `claude CLI found: ${installCheck.version ?? "unknown version"}`,
+    "Anthropic Claude Code CLI",
   );
 
-  // Check env first — allows non-interactive / CI setups.
-  const envToken = (process.env[CLAUDE_CODE_OAUTH_TOKEN_ENV] ?? "").trim();
-  let token: string;
-
-  if (envToken && !validateSetupToken(envToken)) {
+  // 2. Check the CLI is authenticated.
+  const authCheck = checkClaudeAuthed();
+  if (!authCheck.ok) {
     await prompter.note(
-      `Using existing ${CLAUDE_CODE_OAUTH_TOKEN_ENV} from environment.`,
-      "Anthropic Claude Code OAuth",
+      [
+        authCheck.error!,
+        "",
+        "Run `claude auth login` in your terminal, then come back and re-run this setup.",
+      ].join("\n"),
+      "Authentication required",
     );
-    token = envToken;
-  } else {
-    const raw = await prompter.text({
-      message: "Paste Anthropic setup-token",
-      validate: (value) => validateSetupToken(String(value ?? "")),
-    });
-    token = String(raw ?? "").trim();
+    throw new Error(authCheck.error!);
   }
 
-  const validationError = validateSetupToken(token);
-  if (validationError) throw new Error(validationError);
+  // 3. Let the user pick a preferred model tier.
+  const modelRef = await prompter.select({
+    message: "Default Claude model tier",
+    options: AVAILABLE_CLI_MODELS,
+    initialValue: DEFAULT_CLI_MODEL,
+  });
+
+  const chosenModel = String(modelRef ?? DEFAULT_CLI_MODEL).trim() || DEFAULT_CLI_MODEL;
 
   return {
-    profiles: [
-      {
-        profileId: AUTH_PROFILE_ID,
-        credential: {
-          type: "token",
-          provider: AUTH_PROFILE_PROVIDER,
-          token,
-        },
-      },
-    ],
+    // No stored credentials — the claude CLI manages its own OAuth session.
+    profiles: [],
     configPatch: {
-      auth: {
-        profiles: {
-          [AUTH_PROFILE_ID]: {
-            provider: AUTH_PROFILE_PROVIDER,
-            mode: "token",
+      agents: {
+        defaults: {
+          // Route the primary model through the claude-cli subprocess backend.
+          model: {
+            primary: chosenModel,
           },
+          models: Object.fromEntries(AVAILABLE_CLI_MODELS.map((m) => [m.value, {}])),
         },
       },
     },
-    defaultModel: DEFAULT_MODEL,
+    defaultModel: chosenModel,
     notes: [
-      "OAuth tokens are not refreshed automatically. Re-run `claude setup-token` when the token expires.",
-      `You can also update the token by setting ${CLAUDE_CODE_OAUTH_TOKEN_ENV} in your environment and re-running \`openclaw models auth login --provider anthropic-oauth\`.`,
+      "All requests go through the `claude -p` CLI subprocess — no direct API calls are made.",
+      "To change the model tier: `openclaw models auth login --provider anthropic-oauth`.",
+      "To update the CLI session: run `claude auth login` in your terminal.",
     ],
   };
 }
 
 const anthropicOauthPlugin = {
   id: "anthropic-oauth",
-  name: "Anthropic Claude Code OAuth",
+  name: "Anthropic Claude Code CLI",
   description:
-    "Registers Anthropic as an OAuth provider using the Claude Code CLI setup-token flow instead of a raw API key.",
+    "Routes all Claude requests through the `claude -p` subprocess (policy-compliant). No API key or OAuth token is stored by OpenClaw.",
   configSchema: emptyPluginConfigSchema(),
 
   register(api: OpenClawPluginApi) {
     api.registerProvider({
       id: PROVIDER_ID,
       label: PROVIDER_LABEL,
-      docsPath: "/providers/anthropic",
-      aliases: ["claude-oauth", "claude-code-oauth"],
-      envVars: [CLAUDE_CODE_OAUTH_TOKEN_ENV],
+      docsPath: "/gateway/cli-backends",
+      aliases: ["claude-code", "claude-code-cli"],
+      envVars: [],
       auth: [
         {
-          id: "setup-token",
-          label: "Claude Code setup-token (OAuth)",
-          hint: `Paste a token from \`claude setup-token\` — stored as ${CLAUDE_CODE_OAUTH_TOKEN_ENV}`,
-          kind: "token",
-          run: (ctx: ProviderAuthContext) => runSetupTokenAuth(ctx),
+          id: "claude-cli",
+          label: "Claude Code CLI (subprocess)",
+          hint: "Uses `claude -p` — requires the Claude Code CLI to be installed and authenticated",
+          kind: "custom",
+          run: (ctx: ProviderAuthContext) => runClaudeCliAuth(ctx),
         },
       ],
     });
