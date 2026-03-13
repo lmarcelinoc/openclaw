@@ -419,10 +419,16 @@ else
   echo ""
 
   # claude auth login is a readline TUI — it needs a real PTY to render
-  # the code-paste prompt. Use `script` to allocate one; fall back to
-  # plain /dev/tty redirect if `script` isn't available.
+  # the code-paste prompt. Use `script` to allocate one.
+  # Note: BSD script (macOS) and util-linux script (Linux) have different syntax:
+  #   Linux:  script -q -c "<cmd>" /dev/null
+  #   macOS:  script -q /dev/null <cmd>
   if command -v script &>/dev/null; then
-    script -q -c "${CLAUDE_BIN:-claude} auth login" /dev/null
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      script -q /dev/null "${CLAUDE_BIN:-claude}" auth login
+    else
+      script -q -c "${CLAUDE_BIN:-claude} auth login" /dev/null
+    fi
     LOGIN_EXIT=$?
   else
     "${CLAUDE_BIN:-claude}" auth login </dev/tty >/dev/tty 2>/dev/tty
