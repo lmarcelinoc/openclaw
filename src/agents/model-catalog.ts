@@ -1,6 +1,7 @@
 import { type OpenClawConfig, loadConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveOpenClawAgentDir } from "./agent-paths.js";
+import { resolveCliBackendIds } from "./cli-backends.js";
 import { ensureOpenClawModelsJson } from "./models-config.js";
 
 const log = createSubsystemLogger("model-catalog");
@@ -34,6 +35,80 @@ let importPiSdk = defaultImportPiSdk;
 
 const CODEX_PROVIDER = "openai-codex";
 const OPENAI_PROVIDER = "openai";
+
+// ---------------------------------------------------------------------------
+// CLI backend catalog entries
+// These are always available when the corresponding CLI backend is resolved.
+// They never appear in models.json — the cli-runner resolves auth itself.
+// ---------------------------------------------------------------------------
+export const CLAUDE_CLI_PROVIDER = "claude-cli";
+export const CODEX_CLI_PROVIDER = "codex-cli";
+
+const CLAUDE_CLI_CONTEXT_WINDOW = 200_000;
+
+const CLAUDE_CLI_CATALOG: readonly ModelCatalogEntry[] = [
+  {
+    id: "sonnet",
+    name: "Claude Sonnet (CLI) — default",
+    provider: CLAUDE_CLI_PROVIDER,
+    contextWindow: CLAUDE_CLI_CONTEXT_WINDOW,
+  },
+  {
+    id: "opus",
+    name: "Claude Opus (CLI)",
+    provider: CLAUDE_CLI_PROVIDER,
+    contextWindow: CLAUDE_CLI_CONTEXT_WINDOW,
+  },
+  {
+    id: "haiku",
+    name: "Claude Haiku (CLI)",
+    provider: CLAUDE_CLI_PROVIDER,
+    contextWindow: CLAUDE_CLI_CONTEXT_WINDOW,
+  },
+  // Full model IDs are aliases but surface them so users can select explicitly.
+  {
+    id: "claude-sonnet-4-6",
+    name: "claude-sonnet-4-6 (CLI)",
+    provider: CLAUDE_CLI_PROVIDER,
+    contextWindow: CLAUDE_CLI_CONTEXT_WINDOW,
+  },
+  {
+    id: "claude-opus-4-6",
+    name: "claude-opus-4-6 (CLI)",
+    provider: CLAUDE_CLI_PROVIDER,
+    contextWindow: CLAUDE_CLI_CONTEXT_WINDOW,
+  },
+  {
+    id: "claude-haiku-3-5",
+    name: "claude-haiku-3-5 (CLI)",
+    provider: CLAUDE_CLI_PROVIDER,
+    contextWindow: CLAUDE_CLI_CONTEXT_WINDOW,
+  },
+];
+
+const CODEX_CLI_CONTEXT_WINDOW = 200_000;
+
+const CODEX_CLI_CATALOG: readonly ModelCatalogEntry[] = [
+  {
+    id: "gpt-5.4",
+    name: "GPT-5.4 (Codex CLI) — default",
+    provider: CODEX_CLI_PROVIDER,
+    contextWindow: CODEX_CLI_CONTEXT_WINDOW,
+  },
+  {
+    id: "gpt-5.4-pro",
+    name: "GPT-5.4 Pro (Codex CLI)",
+    provider: CODEX_CLI_PROVIDER,
+    contextWindow: CODEX_CLI_CONTEXT_WINDOW,
+  },
+  {
+    id: "o4-mini",
+    name: "o4-mini (Codex CLI)",
+    provider: CODEX_CLI_PROVIDER,
+    contextWindow: CODEX_CLI_CONTEXT_WINDOW,
+    reasoning: true,
+  },
+];
 const OPENAI_GPT54_MODEL_ID = "gpt-5.4";
 const OPENAI_GPT54_PRO_MODEL_ID = "gpt-5.4-pro";
 const OPENAI_CODEX_GPT53_MODEL_ID = "gpt-5.3-codex";
@@ -69,6 +144,36 @@ const SYNTHETIC_CATALOG_FALLBACKS: readonly SyntheticCatalogFallback[] = [
     templateIds: [OPENAI_CODEX_GPT53_MODEL_ID],
   },
 ] as const;
+
+/**
+ * Inject static catalog entries for CLI backends (claude-cli, codex-cli, plus
+ * any user-configured custom backends). These never appear in models.json so
+ * we add them here — they're always available as long as the CLI is installed.
+ */
+function injectCliBackendCatalogEntries(
+  models: ModelCatalogEntry[],
+  config?: OpenClawConfig,
+): void {
+  const backendIds = resolveCliBackendIds(config);
+  const existing = new Set(models.map((m) => `${m.provider}/${m.id}`));
+
+  const inject = (entries: readonly ModelCatalogEntry[]) => {
+    for (const entry of entries) {
+      const key = `${entry.provider}/${entry.id}`;
+      if (!existing.has(key)) {
+        models.push({ ...entry });
+        existing.add(key);
+      }
+    }
+  };
+
+  if (backendIds.has(CLAUDE_CLI_PROVIDER)) {
+    inject(CLAUDE_CLI_CATALOG);
+  }
+  if (backendIds.has(CODEX_CLI_PROVIDER)) {
+    inject(CODEX_CLI_CATALOG);
+  }
+}
 
 function applySyntheticCatalogFallbacks(models: ModelCatalogEntry[]): void {
   const findCatalogEntry = (provider: string, id: string) =>
@@ -252,6 +357,7 @@ export async function loadModelCatalog(params?: {
         models.push({ id, name, provider, contextWindow, reasoning, input });
       }
       mergeConfiguredOptInProviderModels({ config: cfg, models });
+      injectCliBackendCatalogEntries(models, cfg);
       applySyntheticCatalogFallbacks(models);
 
       if (models.length === 0) {

@@ -1,10 +1,11 @@
 import { ensureAuthProfileStore, listProfilesForProvider } from "../agents/auth-profiles.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { hasUsableCustomProviderApiKey, resolveEnvApiKey } from "../agents/model-auth.js";
-import { loadModelCatalog } from "../agents/model-catalog.js";
+import { CLAUDE_CLI_PROVIDER, CODEX_CLI_PROVIDER, loadModelCatalog } from "../agents/model-catalog.js";
 import {
   buildAllowedModelSet,
   buildModelAliasIndex,
+  isCliProvider,
   modelKey,
   normalizeProviderId,
   resolveConfiguredModelRef,
@@ -46,6 +47,13 @@ function hasAuthForProvider(
   cfg: OpenClawConfig,
   store: ReturnType<typeof ensureAuthProfileStore>,
 ) {
+  // CLI backends authenticate through their own binary — no stored API key needed.
+  if (isCliProvider(provider, cfg)) {
+    return true;
+  }
+  if (provider === CLAUDE_CLI_PROVIDER || provider === CODEX_CLI_PROVIDER) {
+    return true;
+  }
   if (listProfilesForProvider(store, provider).length > 0) {
     return true;
   }
