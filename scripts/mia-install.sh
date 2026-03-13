@@ -324,6 +324,17 @@ fi
 # Source nvm for this script session
 nvm_init
 
+# Absolute-path helpers — resolved after each install so subshells and
+# nohup processes don't depend on nvm being re-sourced.
+resolve_bins() {
+  NODE_BIN=$(command -v node 2>/dev/null || true)
+  NPM_BIN=$(command -v npm 2>/dev/null || true)
+  PNPM_BIN=$(command -v pnpm 2>/dev/null || true)
+  CLAUDE_BIN=$(command -v claude 2>/dev/null || true)
+  NODE_DIR=$(dirname "${NODE_BIN:-/usr/local/bin/node}")
+}
+resolve_bins
+
 # ── Step 2 — Install Node.js 24 ───────────────────────────────────────────────
 mia_step "Node.js 24"
 set +u
@@ -337,6 +348,7 @@ else
   nvm_init  # re-source so node is in PATH for this script
 fi
 set +u
+resolve_bins
 
 mia_info "Node $(node -v) | npm $(npm -v)"
 
@@ -345,8 +357,10 @@ mia_step "pnpm"
 if command -v pnpm &>/dev/null; then
   mia_ok "Already installed ($(pnpm --version))"
 else
-  run_step "Installing pnpm" "npm install -g pnpm"
+  run_step "Installing pnpm" "'${NPM_BIN:-npm}' install -g pnpm"
 fi
+resolve_bins  # capture absolute pnpm path immediately after install
+mia_info "pnpm at: ${PNPM_BIN:-not found}"
 
 # ── Step 4 — Install Claude Code CLI ─────────────────────────────────────────
 # Install globally via nvm's npm so claude lands in the nvm-managed bin dir.
@@ -354,8 +368,9 @@ mia_step "Claude Code CLI"
 if command -v claude &>/dev/null; then
   mia_ok "Already installed ($(claude --version 2>&1 | head -1))"
 else
-  run_step "Installing Claude Code CLI" "npm install -g @anthropic-ai/claude-code"
+  run_step "Installing Claude Code CLI" "'${NPM_BIN:-npm}' install -g @anthropic-ai/claude-code"
 fi
+resolve_bins
 
 # ── Step 5 — Clone / update mia-openclaw ─────────────────────────────────────
 mia_step "mia-openclaw repository"
@@ -369,12 +384,12 @@ fi
 # ── Step 6 — Install dependencies ────────────────────────────────────────────
 mia_info "Installing dependencies. First run can take several minutes (~2GB)."
 run_step "Installing dependencies" \
-  "cd \"$REPO_DIR\" && pnpm install"
+  "cd \"$REPO_DIR\" && '${PNPM_BIN:-pnpm}' install"
 
 # ── Step 7 — Build project ────────────────────────────────────────────────────
 mia_info "Building OpenClaw CLI/runtime."
 run_step "Building OpenClaw" \
-  "cd \"$REPO_DIR\" && node scripts/tsdown-build.mjs"
+  "cd \"$REPO_DIR\" && '${NODE_BIN:-node}' scripts/tsdown-build.mjs"
 
 # ── Step 8 — Authenticate Claude Code CLI ────────────────────────────────────
 #
@@ -501,7 +516,7 @@ else
   fi
 
   run_step "Running openclaw onboard" \
-    "cd \"$REPO_DIR\" && node dist/index.js onboard \
+    "'${NODE_BIN:-node}' '${REPO_DIR}/dist/index.js' onboard \
       --non-interactive \
       --accept-risk \
       ${_PROVIDER_FLAGS} \
@@ -520,7 +535,7 @@ else
   # no API key stored, no direct API calls made by OpenClaw.
   mia_info "Setting claude-cli/sonnet as primary model"
   set +e
-  node "$REPO_DIR/dist/index.js" config set agents.defaults.model claude-cli/sonnet 2>&1
+  "${NODE_BIN:-node}" "${REPO_DIR}/dist/index.js" config set agents.defaults.model claude-cli/sonnet 2>&1
   set +e
   mia_ok "Primary model: claude-cli/sonnet"
 fi
@@ -535,14 +550,14 @@ sleep 1
 NODE_BIN=$(dirname "$(command -v node)")
 
 nohup bash -c "
-  export PATH=\"${NODE_BIN}:\$PATH\"
+  export PATH=\"${NODE_DIR}:\$PATH\"
   export OPENCLAW_STATE_DIR=\"${OPENCLAW_STATE_DIR}\"
   export OPENCLAW_CONFIG_PATH=\"${OPENCLAW_CONFIG_PATH}\"
   set -a
   [ -f '${ENV_FILE}' ] && source '${ENV_FILE}'
   set +a
   cd '${REPO_DIR}'
-  exec node dist/index.js gateway run --bind loopback --port 18789 --force
+  exec '${NODE_BIN:-node}' dist/index.js gateway run --bind loopback --port 18789 --force
 " > /tmp/openclaw-gateway.log 2>&1 &
 GATEWAY_PID=$!
 

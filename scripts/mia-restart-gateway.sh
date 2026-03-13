@@ -15,7 +15,8 @@ set +u
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 set +u
 
-NODE_BIN=$(dirname "$(command -v node)" 2>/dev/null || echo "/usr/local/bin")
+NODE_BIN=$(command -v node 2>/dev/null || echo "node")
+NODE_DIR=$(dirname "$NODE_BIN")
 
 echo "Stopping existing gateway..."
 pkill -9 -f openclaw-gateway 2>/dev/null || true
@@ -23,14 +24,14 @@ sleep 1
 
 echo "Starting gateway..."
 nohup bash -c "
-  export PATH=\"${NODE_BIN}:\$PATH\"
+  export PATH=\"${NODE_DIR}:\$PATH\"
   export OPENCLAW_STATE_DIR=\"${OPENCLAW_STATE_DIR}\"
   export OPENCLAW_CONFIG_PATH=\"${OPENCLAW_CONFIG_PATH}\"
   set -a
   [ -f '${ENV_FILE}' ] && source '${ENV_FILE}'
   set +a
   cd '${REPO_DIR}'
-  exec node dist/index.js gateway run --bind loopback --port 18789 --force
+  exec '${NODE_BIN}' dist/index.js gateway run --bind loopback --port 18789 --force
 " > /tmp/openclaw-gateway.log 2>&1 &
 
 sleep 4
