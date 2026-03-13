@@ -409,24 +409,34 @@ echo -e " ${CYAN}2.${RESET} Log in with your Claude account"
 echo -e " ${CYAN}3.${RESET} Return here when done"
 echo ""
 
-if claude auth status &>/dev/null 2>&1; then
+if "${CLAUDE_BIN:-claude}" auth status &>/dev/null 2>&1; then
   mia_ok "Claude CLI already authenticated"
 else
-  read -r -p " Press ENTER to open the login URL..." < /dev/tty || true
   echo ""
-  if claude auth login; then
+  echo -e " ${BOLD}Starting claude auth login...${RESET}"
+  echo -e " ${CYAN}1.${RESET} A URL will appear below — open it in your browser"
+  echo -e " ${CYAN}2.${RESET} Log in, then paste the code shown back here"
+  echo ""
+
+  # Run auth login fully attached to the terminal (stdin + stdout + stderr).
+  # This is required because claude auth login is an interactive TUI —
+  # piping or redirecting any of its streams breaks the code-paste prompt.
+  "${CLAUDE_BIN:-claude}" auth login </dev/tty >/dev/tty 2>/dev/tty
+  LOGIN_EXIT=$?
+
+  if [[ $LOGIN_EXIT -eq 0 ]]; then
     mia_ok "Claude CLI authenticated"
   else
-    mia_warn "claude auth login returned a non-zero exit. Checking status..."
+    mia_warn "claude auth login exited with code $LOGIN_EXIT. Checking status..."
   fi
 fi
 
-# Verify authentication actually works
-if claude auth status &>/dev/null 2>&1; then
+# Verify the CLI session is usable
+if "${CLAUDE_BIN:-claude}" auth status </dev/null >/dev/null 2>&1; then
   mia_ok "Verified: claude -p is ready"
 else
   mia_warn "Claude CLI not confirmed authenticated."
-  mia_warn "Run 'claude auth login' manually if 'claude -p' fails later."
+  mia_warn "Run '${CLAUDE_BIN:-claude} auth login' manually if 'claude -p' fails later."
 fi
 
 # ── Step 9 — .env setup ───────────────────────────────────────────────────────
