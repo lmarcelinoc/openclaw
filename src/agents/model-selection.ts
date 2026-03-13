@@ -516,7 +516,13 @@ export function buildAllowedModelSet(params: {
   }
 
   const allowedCatalog = [
-    ...params.catalog.filter((entry) => allowedKeys.has(modelKey(entry.provider, entry.id))),
+    ...params.catalog.filter(
+      (entry) =>
+        allowedKeys.has(modelKey(entry.provider, entry.id)) ||
+        // CLI backends are always available (no stored credentials required)
+        // so they are always included in the catalog regardless of allowlist.
+        isCliProvider(entry.provider, params.cfg),
+    ),
     ...syntheticCatalogEntries.values(),
   ];
 
