@@ -353,6 +353,15 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
 
+  extensions/knowledge-base:
+    devDependencies:
+      '@clack/prompts':
+        specifier: ^1.1.0
+        version: 1.1.0
+      openclaw:
+        specifier: '*'
+        version: 2026.3.8(@discordjs/opus@0.10.0)(@napi-rs/canvas@0.1.95)(@types/express@5.0.6)(audio-decode@2.2.3)(hono@4.12.7)(node-llama-cpp@3.16.2(typescript@5.9.3))
+
   extensions/line: {}
 
   extensions/llm-task:

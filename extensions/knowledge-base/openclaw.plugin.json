@@ -1,0 +1,9 @@
+{
+  "id": "knowledge-base",
+  "kind": "kb",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
